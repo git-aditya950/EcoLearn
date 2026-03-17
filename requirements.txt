@@ -1,0 +1,10 @@
+streamlit>=1.28.0
+sqlalchemy>=2.0.23
+bcrypt>=4.1.1
+requests>=2.31.0
+pandas>=2.2.0
+numpy>=2.0.0
+matplotlib>=3.9.0
+plotly>=5.18.0
+reportlab>=4.0.7
+python-dotenv>=1.0.0
