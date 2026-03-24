@@ -167,18 +167,87 @@ class GamificationEngine:
             session.close()
     
     @staticmethod
+    def calculate_quiz_streak(user_id: int) -> dict:
+        """
+        Calculate consecutive days with quiz attempts.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Dictionary with current streak and max streak
+        """
+        from datetime import datetime, timedelta
+        
+        session = Session()
+        try:
+            user = session.query(User).filter(User.id == user_id).first()
+            
+            if not user:
+                return {'success': False, 'current_streak': 0, 'max_streak': 0}
+            
+            # Get all quiz attempts sorted by date
+            attempts = session.query(QuizAttempt).filter(
+                QuizAttempt.user_id == user_id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
+            
+            if not attempts or not any(a.completed_at for a in attempts):
+                return {'success': True, 'current_streak': 0, 'max_streak': 0}
+            
+            # Get unique dates with quiz attempts
+            attempt_dates = set()
+            for attempt in attempts:
+                if attempt.completed_at:
+                    attempt_dates.add(attempt.completed_at.date())
+            
+            if not attempt_dates:
+                return {'success': True, 'current_streak': 0, 'max_streak': 0}
+            
+            # Sort dates in descending order
+            sorted_dates = sorted(list(attempt_dates), reverse=True)
+            
+            # Calculate current streak (from today or yesterday backwards)
+            today = datetime.utcnow().date()
+            current_streak = 0
+            max_streak = 0
+            temp_streak = 0
+            
+            # Check current streak starting from today or yesterday
+            current_check_date = today
+            for attempt_date in sorted_dates:
+                if attempt_date == current_check_date or attempt_date == current_check_date - timedelta(days=1):
+                    current_streak += 1
+                    current_check_date = attempt_date
+                else:
+                    break
+            
+            # Calculate max streak (consecutive days)
+            if sorted_dates:
+                temp_streak = 1
+                for i in range(len(sorted_dates) - 1):
+                    if sorted_dates[i] - sorted_dates[i + 1] == timedelta(days=1):
+                        temp_streak += 1
+                    else:
+                        max_streak = max(max_streak, temp_streak)
+                        temp_streak = 1
+                max_streak = max(max_streak, temp_streak)
+            
+            return {
+                'success': True,
+                'current_streak': current_streak,
+                'max_streak': max_streak
+            }
+        
+        finally:
+            session.close()
+    
+    @staticmethod
     def track_login_streak(user_id: int) -> dict:
         """
-        Track daily login streak.
-        Note: This requires tracking login dates, which would need UserLoginLog table
+        Track daily quiz attempt streak (deprecated - use calculate_quiz_streak instead).
+        Note: This maintains compatibility with existing code.
         """
-        # Placeholder implementation
-        return {
-            'success': True,
-            'current_streak': 1,
-            'max_streak': 1,
-            'streak_reward_xp': 10
-        }
+        return GamificationEngine.calculate_quiz_streak(user_id)
     
     @staticmethod
     def get_daily_reward(user_id: int) -> dict:

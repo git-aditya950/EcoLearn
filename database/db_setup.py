@@ -233,6 +233,27 @@ class Achievement(Base):
         return f'<Achievement {self.name}>'
 
 
+class PasswordReset(Base):
+    """PasswordReset model for password reset tokens."""
+    __tablename__ = 'password_resets'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    reset_token = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(120), nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)  # Token expires after 24 hours
+    used_at = Column(DateTime)  # When the token was used
+    
+    # Relationships
+    user = relationship('User', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<PasswordReset user={self.user_id}>'
+
+
+
 def init_db():
     """Initialize the database by creating all tables."""
     Base.metadata.create_all(engine)

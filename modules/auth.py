@@ -4,8 +4,11 @@ Handles user registration, login, and password management.
 """
 
 import bcrypt
+import secrets
+import string
 from sqlalchemy.orm import Session
-from database.db_setup import User, engine, Session
+from datetime import datetime, timedelta
+from database.db_setup import User, PasswordReset, engine, Session
 from config import BCRYPT_LOG_ROUNDS
 import streamlit as st
 
@@ -198,6 +201,143 @@ class AuthManager:
         except Exception as e:
             session.rollback()
             return {'success': False, 'message': f'Update failed: {str(e)}'}
+        
+        finally:
+            session.close()
+    
+    @staticmethod
+    def request_password_reset(email: str) -> dict:
+        """
+        Generate a password reset token for a user.
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            Dictionary with success status and reset token
+        """
+        session = Session()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            
+            if not user:
+                # Don't reveal if email exists (security best practice)
+                return {'success': True, 'message': 'If email exists, reset link sent'}
+            
+            # Generate secure token
+            reset_token = secrets.token_urlsafe(32)
+            
+            # Create password reset record (expires in 24 hours)
+            expires_at = datetime.utcnow() + timedelta(hours=24)
+            
+            # Delete old reset tokens for this user
+            session.query(PasswordReset).filter(
+                PasswordReset.user_id == user.id,
+                PasswordReset.is_used == False
+            ).delete()
+            
+            password_reset = PasswordReset(
+                user_id=user.id,
+                reset_token=reset_token,
+                email=email,
+                expires_at=expires_at
+            )
+            
+            session.add(password_reset)
+            session.commit()
+            
+            return {
+                'success': True,
+                'message': 'Reset link sent to email',
+                'token': reset_token,
+                'username': user.username
+            }
+        
+        except Exception as e:
+            session.rollback()
+            return {'success': False, 'message': f'Error: {str(e)}'}
+        
+        finally:
+            session.close()
+    
+    @staticmethod
+    def verify_reset_token(reset_token: str) -> dict:
+        """
+        Verify a password reset token.
+        
+        Args:
+            reset_token: The reset token to verify
+            
+        Returns:
+            Dictionary with success status and user email
+        """
+        session = Session()
+        try:
+            reset = session.query(PasswordReset).filter(
+                PasswordReset.reset_token == reset_token,
+                PasswordReset.is_used == False,
+                PasswordReset.expires_at > datetime.utcnow()
+            ).first()
+            
+            if not reset:
+                return {'success': False, 'message': 'Invalid or expired reset token'}
+            
+            return {
+                'success': True,
+                'email': reset.email,
+                'user_id': reset.user_id,
+                'token': reset_token
+            }
+        
+        finally:
+            session.close()
+    
+    @staticmethod
+    def reset_password(reset_token: str, new_password: str) -> dict:
+        """
+        Reset user password using a reset token.
+        
+        Args:
+            reset_token: The reset token
+            new_password: The new password
+            
+        Returns:
+            Dictionary with success status
+        """
+        session = Session()
+        try:
+            # Validate password
+            if len(new_password) < 6:
+                return {'success': False, 'message': 'Password must be at least 6 characters'}
+            
+            # Verify reset token
+            reset = session.query(PasswordReset).filter(
+                PasswordReset.reset_token == reset_token,
+                PasswordReset.is_used == False,
+                PasswordReset.expires_at > datetime.utcnow()
+            ).first()
+            
+            if not reset:
+                return {'success': False, 'message': 'Invalid or expired reset token'}
+            
+            # Get the user
+            user = session.query(User).filter(User.id == reset.user_id).first()
+            
+            if not user:
+                return {'success': False, 'message': 'User not found'}
+            
+            # Update password
+            user.password_hash = AuthManager.hash_password(new_password)
+            reset.is_used = True
+            reset.used_at = datetime.utcnow()
+            
+            session.commit()
+            
+            return {'success': True, 'message': 'Password reset successful'}
+        
+        except Exception as e:
+            session.rollback()
+            return {'success': False, 'message': f'Error: {str(e)}'}
         
         finally:
             session.close()
