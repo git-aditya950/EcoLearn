@@ -247,7 +247,7 @@ class PasswordReset(Base):
     used_at = Column(DateTime)  # When the token was used
     
     # Relationships
-    user = relationship('User', cascade='all, delete-orphan')
+    user = relationship('User')
     
     def __repr__(self):
         return f'<PasswordReset user={self.user_id}>'
